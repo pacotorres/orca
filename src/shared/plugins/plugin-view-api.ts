@@ -29,6 +29,7 @@ export const pluginViewAgentSchema = z
     worktreeId: z.string().min(1).max(128),
     activeWorktree: z.boolean(),
     worker: z.boolean(),
+    parentAgentId: z.string().min(1).max(128).optional(),
     attention: z.boolean(),
     statusUpdatedAt: z.number().finite().nonnegative().nullable(),
     model: z.string().min(1).max(120).optional(),

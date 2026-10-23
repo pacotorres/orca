@@ -235,6 +235,7 @@ export function projectPluginViewSnapshot(
           card.worktreeId === activeWorktreeId &&
           (activeExecutionHostId == null || card.executionHostId === activeExecutionHostId),
         worker: true,
+        parentAgentId: agentId,
         attention: child.dotState === 'blocked' || child.dotState === 'waiting',
         statusUpdatedAt: null
       })

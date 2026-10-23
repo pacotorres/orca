@@ -216,7 +216,7 @@ export function PluginViewContextSidebar({
                   </option>
                   {sessions.map((session) => (
                     <option key={session.agentId} value={session.agentId}>
-                      {session.sessionLabel} · {session.worktreeName} ·{' '}
+                      {session.worktreeName} · {session.sessionLabel} ·{' '}
                       {statusLabel(session.status)}
                     </option>
                   ))}
