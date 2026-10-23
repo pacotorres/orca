@@ -14,6 +14,10 @@ import { z } from 'zod'
 
 export const PLUGIN_CAPABILITY_KINDS = [
   'workspace:read',
+  'projects:read',
+  'worktrees:read',
+  'agents:read',
+  'agents:send',
   'terminal:send',
   'notifications:show',
   'storage',
@@ -34,6 +38,10 @@ export type PluginCapability = z.infer<typeof pluginCapabilitySchema>
  *  preview / consent dialog; keep each line honest about what is enforced. */
 export const PLUGIN_CAPABILITY_DESCRIPTIONS: Record<PluginCapabilityKind, string> = {
   'workspace:read': 'Read the name, branch, and terminal list of your focused worktree',
+  'projects:read': 'Read project names and the project selected by the active worktree',
+  'worktrees:read': 'Read worktree names and identify the active worktree',
+  'agents:read': 'Read bounded agent identity and status summaries',
+  'agents:send': 'Send a message to one explicitly selected, currently running agent session',
   'terminal:send': 'Type text into a terminal you can see (always a specific terminal)',
   'notifications:show': 'Show desktop notifications labeled with the plugin name',
   storage: "Store data in the plugin's own storage folder",

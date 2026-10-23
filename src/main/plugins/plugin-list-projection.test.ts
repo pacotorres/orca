@@ -33,6 +33,7 @@ function serviceWith(
       getPluginConsents: () => ({}),
       getDisabledPlugins: () => []
     },
+    getGrantedCapabilities: () => [],
     getDiscovered: () => [discovered],
     activationState: () => options.activation ?? 'pending',
     workerState: () => options.worker ?? { state: 'inactive', restarts: 0 },

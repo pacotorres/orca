@@ -1,4 +1,4 @@
-import { Suspense, useRef } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import { translate } from '@/i18n/i18n'
 import Sidebar from '../components/Sidebar'
@@ -8,9 +8,15 @@ import { FloatingTerminalToggleButton } from '../components/floating-terminal/Fl
 import { TerminalWorkbenchContainer } from '../components/TerminalWorkbenchContainer'
 import type { VirtualizedScrollAnchor } from '../hooks/useVirtualizedScrollAnchor'
 import { TitlebarLeftControls } from './TitlebarLeftControls'
-import { RightSidebarToggle, TitlebarMainStrip } from './TitlebarMainStrip'
+import { PluginViewPage } from './PluginViewPage'
+import { RightSidebarToggleButton, TitlebarMainStrip } from './TitlebarMainStrip'
 import type { AppChromeLayout } from './use-app-chrome-layout'
 import type { FloatingWorkspacePanelState } from './use-floating-workspace-panel'
+import { usePluginPanelsStore, usePluginViews } from '@/store/plugin-panels'
+import { useAppStore } from '@/store'
+import { PluginViewContextSidebar } from '../components/plugin-views/PluginViewContextSidebar'
+import type { PluginViewSnapshot } from '../../../shared/plugins/plugin-view-api'
+import type { ActiveAgentNotesSendResult } from '@/lib/active-agent-note-send'
 
 const Landing = lazy(() => import('../components/Landing'))
 const WorktreeCreationPanel = lazy(
@@ -93,8 +99,61 @@ export function AppWorkspaceShell(props: {
   floatingWorkspace: FloatingWorkspacePanelState
 }): React.JSX.Element {
   const { layout, floatingWorkspace } = props
+  const pluginViews = usePluginViews()
+  const plugins = usePluginPanelsStore((state) => state.plugins)
+  const [selectedPluginViewKey, setSelectedPluginViewKey] = useState('traditional')
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
+  const [pluginSnapshot, setPluginSnapshot] = useState<PluginViewSnapshot | null>(null)
+  const [revealPluginAgent, setRevealPluginAgent] = useState<((agentId: string) => boolean) | null>(
+    null
+  )
+  const [sendPluginAgent, setSendPluginAgent] = useState<
+    ((agentId: string, prompt: string) => Promise<ActiveAgentNotesSendResult>) | null
+  >(null)
+  const [contextSidebarOpen, setContextSidebarOpen] = useState(false)
+  const rightSidebarWidth = useAppStore((state) => state.rightSidebarWidth)
+  const previousPluginActive = useRef(false)
+  const selectedPluginView = useMemo(
+    () =>
+      pluginViews.find((view) => `${view.pluginKey}:${view.id}` === selectedPluginViewKey) ?? null,
+    [pluginViews, selectedPluginViewKey]
+  )
+  const pluginViewActive = layout.activeView === 'terminal' && selectedPluginView !== null
+  const selectedPlugin = plugins.find(
+    (plugin) => plugin.pluginKey === selectedPluginView?.pluginKey
+  )
+  const canSendAgentMessages = selectedPlugin?.grantedCapabilities?.includes('agents:send') ?? false
+  useEffect(() => {
+    if (pluginViewActive && !previousPluginActive.current) {
+      setContextSidebarOpen(layout.rightSidebarOpen)
+      setSelectedAgentId(null)
+    } else if (!pluginViewActive) {
+      setContextSidebarOpen(false)
+      setSelectedAgentId(null)
+    }
+    previousPluginActive.current = pluginViewActive
+  }, [layout.rightSidebarOpen, pluginViewActive])
+  const handlePluginSnapshotChange = useCallback((snapshot: PluginViewSnapshot): void => {
+    setPluginSnapshot(snapshot)
+    setSelectedAgentId((current) =>
+      current && snapshot.agents.some((agent) => agent.id === current) ? current : null
+    )
+  }, [])
+  const toggleContextSidebar = useCallback((): void => {
+    setContextSidebarOpen((open) => !open)
+  }, [])
   const titlebarLeftControls = <TitlebarLeftControls layout={layout} />
-  const titlebarMainStrip = <TitlebarMainStrip layout={layout} />
+  const titlebarMainStrip = (
+    <TitlebarMainStrip
+      layout={layout}
+      pluginViews={pluginViews}
+      selectedPluginViewKey={pluginViewActive ? selectedPluginViewKey : 'traditional'}
+      onPluginViewChange={setSelectedPluginViewKey}
+      pluginViewActive={pluginViewActive}
+      contextualSidebarOpen={contextSidebarOpen}
+      onContextualSidebarToggle={toggleContextSidebar}
+    />
+  )
   // Why: keep virtualized scroll memory above the sidebar's workspace/landing remount so the left list doesn't restart at scrollTop 0.
   const scrollOffsetRef = useRef(0)
   const scrollAnchorRef = useRef<VirtualizedScrollAnchor>(null)
@@ -156,30 +215,42 @@ export function AppWorkspaceShell(props: {
             ) : null}
             <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
               {/* Why: automations/artifacts own their page headers; the stacked titlebar would be an empty 36px stripe. */}
+              {layout.workspaceChromeActive && pluginViews.length > 0 ? (
+                <div className="titlebar">{titlebarMainStrip}</div>
+              ) : null}
               {layout.stackedSidebarOpen &&
+              !pluginViewActive &&
               layout.activeView !== 'automations' &&
               layout.activeView !== 'artifacts' ? (
                 <div className="titlebar">{titlebarMainStrip}</div>
               ) : null}
               <div className="relative flex flex-1 min-w-0 min-h-0 overflow-hidden">
                 {/* Why: match the RightSidebar header's 36px/top-0 so the toggle's vertical center is identical open vs closed — else the icon jitters. */}
-                {layout.workspaceChromeActive && !layout.rightSidebarOpen && (
-                  <div
-                    className="absolute top-0 z-10 flex items-center h-[36px]"
-                    style={
-                      {
-                        // Why: --window-controls-width keeps the toggle clear of the fixed window-controls overlay (138px on custom chrome, 0px otherwise); no internal spacer — one would cover the pane-actions Ellipsis button with an unclickable div.
-                        right: 'var(--window-controls-width)',
-                        WebkitAppRegion: 'no-drag'
-                      } as React.CSSProperties
-                    }
-                  >
-                    {layout.showRightSidebarControls ? <RightSidebarToggle /> : null}
-                  </div>
-                )}
+                {layout.workspaceChromeActive &&
+                  (pluginViewActive ? !contextSidebarOpen : !layout.rightSidebarOpen) && (
+                    <div
+                      className="absolute top-0 z-10 flex items-center h-[36px]"
+                      style={
+                        {
+                          // Why: --window-controls-width keeps the toggle clear of the fixed window-controls overlay (138px on custom chrome, 0px otherwise); no internal spacer — one would cover the pane-actions Ellipsis button with an unclickable div.
+                          right: 'var(--window-controls-width)',
+                          WebkitAppRegion: 'no-drag'
+                        } as React.CSSProperties
+                      }
+                    >
+                      {layout.showRightSidebarControls ? (
+                        <RightSidebarToggleButton
+                          onToggle={pluginViewActive ? toggleContextSidebar : undefined}
+                          ariaLabel={pluginViewActive ? 'Abrir panel contextual' : undefined}
+                        />
+                      ) : null}
+                    </div>
+                  )}
                 <div className="flex flex-1 min-w-0 min-h-0 flex-col">
                   {layout.shouldMountTerminalWorkbench ? (
-                    <TerminalWorkbenchContainer isVisible={layout.terminalWorkbenchVisible}>
+                    <TerminalWorkbenchContainer
+                      isVisible={layout.terminalWorkbenchVisible && !pluginViewActive}
+                    >
                       <Suspense fallback={null}>
                         <RecoverableRenderErrorBoundary
                           boundaryId="terminal.workbench"
@@ -210,7 +281,18 @@ export function AppWorkspaceShell(props: {
                         'Retry the page or navigate to another Orca surface.'
                       )}
                     >
-                      <ActivePage layout={layout} />
+                      {pluginViewActive && selectedPluginView ? (
+                        <PluginViewPage
+                          view={selectedPluginView}
+                          selectedAgentId={selectedAgentId}
+                          onAgentSelection={setSelectedAgentId}
+                          onSnapshotChange={handlePluginSnapshotChange}
+                          onRevealAgentHandlerChange={setRevealPluginAgent}
+                          onSendAgentHandlerChange={setSendPluginAgent}
+                        />
+                      ) : (
+                        <ActivePage layout={layout} />
+                      )}
                     </RecoverableRenderErrorBoundary>
                   </Suspense>
                 </div>
@@ -240,7 +322,38 @@ export function AppWorkspaceShell(props: {
               'Retry the sidebar or switch tabs to reload this surface.'
             )}
           >
-            <RightSidebar />
+            <div className="relative flex h-full shrink-0">
+              <div
+                data-native-right-sidebar="true"
+                className={
+                  pluginViewActive
+                    ? 'invisible pointer-events-none absolute inset-y-0 right-0'
+                    : 'relative h-full'
+                }
+                aria-hidden={pluginViewActive}
+              >
+                <RightSidebar />
+              </div>
+              {pluginViewActive ? (
+                <PluginViewContextSidebar
+                  title={selectedPluginView?.title ?? 'Plugin'}
+                  snapshot={pluginSnapshot}
+                  selectedAgentId={selectedAgentId}
+                  open={contextSidebarOpen}
+                  width={rightSidebarWidth}
+                  onSelectAgent={setSelectedAgentId}
+                  canSendAgentMessages={canSendAgentMessages}
+                  onSendAgent={sendPluginAgent}
+                  onRevealAgent={(agentId) => {
+                    // Why: leave the iframe before Orca activates its native terminal surface.
+                    setSelectedPluginViewKey('traditional')
+                    const revealed = revealPluginAgent?.(agentId) ?? false
+                    return revealed
+                  }}
+                  onClose={() => setContextSidebarOpen(false)}
+                />
+              ) : null}
+            </div>
           </RecoverableRenderErrorBoundary>
         ) : null}
       </div>

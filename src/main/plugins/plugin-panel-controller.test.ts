@@ -17,6 +17,7 @@ async function createPlugin(): Promise<ValidDiscoveredPlugin> {
   const rootDir = await mkdtemp(join(tmpdir(), 'orca-plugin-panel-controller-'))
   roots.push(rootDir)
   await writeFile(join(rootDir, 'panel.html'), '<h1>Panel</h1>')
+  await writeFile(join(rootDir, 'view.html'), '<h1>View</h1>')
   return {
     pluginKey: 'orca-samples.demo',
     rootDir,
@@ -30,10 +31,16 @@ async function createPlugin(): Promise<ValidDiscoveredPlugin> {
       pluginApi: 1,
       contributes: {
         panels: [{ id: 'dashboard', title: 'Dashboard', entry: 'panel.html' }],
+        views: [{ id: 'office', title: 'Office', entry: 'view.html' }],
         commands: [],
         events: []
       },
-      capabilities: [{ kind: 'notifications:show' }]
+      capabilities: [
+        { kind: 'notifications:show' },
+        { kind: 'projects:read' },
+        { kind: 'worktrees:read' },
+        { kind: 'agents:read' }
+      ]
     }),
     consentFingerprint: 'sha256-consented',
     contentHash: null,
@@ -42,6 +49,20 @@ async function createPlugin(): Promise<ValidDiscoveredPlugin> {
 }
 
 describe('PluginPanelController identity binding', () => {
+  it('loads approved view entries through the same integrity-checked sandbox shell', async () => {
+    const plugin = await createPlugin()
+    const controller = new PluginPanelController({
+      resolveApprovedPlugin: () => plugin,
+      contentVerifier: { verify: vi.fn().mockResolvedValue(undefined) },
+      executeHostCall: vi.fn(),
+      log: () => vi.fn()
+    })
+    const entry = await controller.readViewEntry(plugin.pluginKey, 'office')
+    expect(entry?.html).toContain('View')
+    expect(entry?.html).toContain("connect-src 'none'")
+    await expect(controller.readViewEntry(plugin.pluginKey, 'missing')).resolves.toBeNull()
+  })
+
   it('uses the session identity and rejects caller-supplied plugin claims', async () => {
     const plugin = await createPlugin()
     const executeHostCall = vi.fn().mockResolvedValue({ ok: true, value: { delivered: true } })

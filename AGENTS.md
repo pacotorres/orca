@@ -66,3 +66,24 @@ For a failed GitHub Actions run, inspect the failed jobs and retry with `gh run 
 # Tests
 
 Avoid adding low-value tests. These might be fine for development but offer low value when checked in. [Anti-patterns](./docs/reference/test-antipatterns.md)
+
+# Project Documentation
+
+For substantial work in this repository, keep the Obsidian project notes for **ORCA OFFICE'S** current. This project documents the VOXEL virtual office built around Orca and AgentVerse; Orca itself remains the source of truth for its implementation and runtime behavior.
+
+Before starting substantial analysis or implementation, read the project index and map:
+
+- macOS: `/Users/pacotorres/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mente/PROYECTOS/ORCA OFFICE'S/index.md`
+- Windows: `C:\Users\paco\iCloudDrive\iCloud~md~obsidian\Documents\Mente\PROYECTOS\ORCA OFFICE'S\index.md`
+
+Document information that will help future work: confirmed product requirements, important findings, architecture and integration contracts, meaningful implementation changes, validation results, limitations, and unresolved questions. Do not create a log entry for every routine code edit.
+
+Use the project structure:
+
+- `20_DOCUMENTACION/` for current context, architecture, and technical findings.
+- `30_DECISIONES/` for decisions the user has confirmed; keep proposals and unresolved alternatives in documentation until then.
+- `10_REUNIONES/` for meeting notes and agreements.
+- `00_INBOX/` for unsorted links and incoming material.
+- `90_ARCHIVO/` for superseded material; do not delete historical notes.
+
+Use relative Obsidian links. Update the project index when adding or renaming important notes, add new projects to the vault's `PROYECTOS/index.md` only when appropriate, and append a dated entry to the vault's `20_WIKI/log.md` for significant documentation updates. Keep these notes concise and omit credentials, tokens, private prompts, transcripts, and raw terminal output. If the vault is unavailable, do not create a competing documentation copy in this repository; report what should be recorded and where.

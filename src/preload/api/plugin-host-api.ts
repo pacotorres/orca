@@ -17,6 +17,8 @@ export type PluginHostPanel = {
   tabKey: `plugin:${string}`
 }
 
+export type PluginHostView = { id: string; title: string }
+
 /** `pending` = awaiting (re-)consent; `idle` = enabled, worker not running
  *  (lazy); `restarting` = waiting for supervised backoff; `errored` = crashed past the restart budget or failed to start;
  *  `invalid` = unreadable manifest. */
@@ -45,7 +47,9 @@ export type PluginHostListEntry = {
   official: boolean
   bundled: boolean
   capabilities: { kind: string; description: string }[]
+  grantedCapabilities?: string[]
   panels: PluginHostPanel[]
+  views?: PluginHostView[]
   commands: {
     id: string
     title: string
@@ -150,6 +154,7 @@ export type PluginsApi = {
   /** Returns the panel's CSP-wrapped HTML, or null when the plugin or
    *  panel is missing/disabled. Rendered only inside a sandboxed iframe. */
   readPanelEntry: (args: { pluginKey: string; panelId: string }) => Promise<PluginPanelEntry | null>
+  readViewEntry: (args: { pluginKey: string; viewId: string }) => Promise<{ html: string } | null>
   invokeCommand: (args: {
     pluginKey: string
     commandId: string

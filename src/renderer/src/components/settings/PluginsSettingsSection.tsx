@@ -9,6 +9,7 @@ import { PluginInstallDialog } from './PluginInstallDialog'
 import { PluginRemoveDialog } from './PluginRemoveDialog'
 import { PluginRollbackDialog } from './PluginRollbackDialog'
 import { PluginSettingsOverview } from './PluginSettingsOverview'
+import { usePluginPanelsStore } from '@/store/plugin-panels'
 import { getPluginsSectionPresentation } from './plugins-search'
 import { SettingsSection } from './SettingsSection'
 import { usePluginLogs } from './use-plugin-logs'
@@ -46,6 +47,9 @@ export function PluginsSettingsSection({
   const applyPluginList = (nextPlugins: PluginHostListEntry[]): void => {
     const installedPluginKeys = new Set(nextPlugins.map((plugin) => plugin.pluginKey))
     setPlugins(nextPlugins)
+    // Why: settings mutations (especially consent) are authoritative plugin-list changes too;
+    // keep workspace views and panels in sync without requiring an app reload.
+    usePluginPanelsStore.getState().setPlugins(nextPlugins)
     setError(null)
     // Why: accepted discovery results own installed-plugin identity and invalidate stale UI state.
     setConsentPluginId((current) => (current && installedPluginKeys.has(current) ? current : null))

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body, #root { width: 100%; height: 100%; min-width: 320px; min-height: 240px; margin: 0; overflow: hidden; }
+      body { color: #f1f5f9; background: #0a0f1a; font: 13px/1.45 Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .scene { position: relative; width: 100%; height: 100%; }
+      .scene > div:first-child { position: absolute !important; inset: 0; }
+      .scene-header { position: absolute; z-index: 2; top: 20px; left: 22px; display: grid; gap: 4px; pointer-events: none; text-shadow: 0 1px 8px #000; }
+      .scene-brand { width: max-content; padding: 4px 9px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 999px; background: rgb(15 23 42 / 78%); color: #cbd5e1; font-size: 10px; font-weight: 700; letter-spacing: .12em; }
+      .scene-project { margin-top: 5px; font-size: clamp(20px, 2.2vw, 30px); font-weight: 650; letter-spacing: -.03em; }
+      .scene-summary { color: #cbd5e1; font-size: 12px; }
+      .scene-bridge { width: max-content; margin-top: 3px; padding: 3px 8px; border: 1px solid rgb(110 231 183 / 22%); border-radius: 999px; background: rgb(15 23 42 / 74%); color: #a7f3d0; font-size: 10px; font-weight: 600; text-shadow: none; }
+      .scene-bridge-loading { border-color: rgb(147 197 253 / 24%); color: #bfdbfe; }
+      .scene-bridge-stale { border-color: rgb(251 191 36 / 35%); background: rgb(69 39 5 / 88%); color: #fde68a; }
+      .scene-host { width: max-content; margin-top: 3px; padding: 3px 8px; border: 1px solid rgb(110 231 183 / 22%); border-radius: 999px; background: rgb(15 23 42 / 74%); color: #a7f3d0; font-size: 10px; font-weight: 600; text-shadow: none; }
+      .scene-host-connecting, .scene-host-unknown { border-color: rgb(147 197 253 / 24%); color: #bfdbfe; }
+      .scene-host-disconnected, .scene-host-unavailable { border-color: rgb(248 113 113 / 35%); background: rgb(69 10 10 / 88%); color: #fecaca; }
+      .scene-filters { position: absolute; z-index: 3; top: 20px; right: 22px; display: flex; align-items: end; gap: 8px; padding: 10px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 10px; background: rgb(15 23 42 / 92%); box-shadow: 0 8px 24px rgb(0 0 0 / 24%); color: #dbe4f0; }
+      .scene-filters label { display: grid; gap: 4px; color: #b8c4d5; font-size: 11px; }
+      .scene-filters select { min-width: 148px; min-height: 32px; padding: 0 26px 0 9px; border: 1px solid rgb(255 255 255 / 16%); border-radius: 6px; background: #171e29; color: #f1f5f9; font: inherit; font-size: 12px; }
+      .scene-filters select:focus-visible, .scene-detail-heading button:focus-visible, [data-agent-id]:focus-visible { outline: 2px solid #77d8b0; outline-offset: 2px; }
+      .scene-filter-count { padding: 0 3px 8px; color: #aebacc; font-size: 11px; white-space: nowrap; }
+      .scene-agent-detail { position: absolute; z-index: 3; left: 22px; bottom: 22px; display: grid; gap: 7px; width: min(280px, calc(100% - 44px)); padding: 13px 14px; border: 1px solid rgb(119 216 176 / 50%); border-radius: 10px; background: rgb(15 23 42 / 95%); box-shadow: 0 8px 24px rgb(0 0 0 / 26%); color: #cbd5e1; font-size: 12px; }
+      .scene-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #f1f5f9; font-size: 14px; }
+      .scene-detail-heading button { padding: 3px 6px; border: 1px solid rgb(255 255 255 / 16%); border-radius: 5px; background: transparent; color: #cbd5e1; font: inherit; cursor: pointer; }
+      .scene-agent-detail p { margin: 2px 0 0; color: #f6d58a; }
+      .scene-empty { position: absolute; z-index: 2; top: 50%; left: 50%; width: min(360px, calc(100% - 40px)); transform: translate(-50%, -50%); padding: 16px 20px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 10px; background: rgb(15 23 42 / 88%); color: #dbe4f0; text-align: center; pointer-events: none; }
+      .scene-filter-empty { top: 58%; }
+      .scene-error { position: absolute; z-index: 5; inset: 0; display: grid; align-content: center; justify-items: center; gap: 10px; padding: 28px; background: #0a0f1a; color: #f1f5f9; text-align: center; }
+      .scene-error h1 { margin: 0; font-size: 18px; font-weight: 650; }
+      .scene-error p { max-width: 48ch; margin: 0; color: #cbd5e1; }
+      .scene-error .scene-error-summary { color: #aebacc; font-size: 12px; }
+      .scene-error button { min-height: 36px; margin-top: 4px; padding: 0 12px; border: 1px solid rgb(119 216 176 / 55%); border-radius: 6px; background: #17251f; color: #d9f8e9; font: inherit; cursor: pointer; }
+      .scene-error button:hover { background: #20362c; }
+      .scene-error button:focus-visible { outline: 2px solid #77d8b0; outline-offset: 3px; }
+      @media (max-width: 680px) { .scene-header { top: 14px; left: 14px; } .scene-filters { top: auto; right: 14px; bottom: 14px; left: 14px; justify-content: stretch; gap: 6px; padding: 8px; } .scene-filters label { min-width: 0; flex: 1; } .scene-filters select { min-width: 0; width: 100%; } .scene-filter-count { padding-bottom: 8px; } .scene-agent-detail { right: auto; bottom: 76px; left: 14px; width: min(280px, calc(100% - 28px)); } }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      <!-- VOXEL_RUNTIME -->
+    </script>
+  </body>
+</html>

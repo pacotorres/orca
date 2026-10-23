@@ -47,6 +47,31 @@ export class PluginPanelController {
     return (await this.load(pluginKey, panelId))?.entry ?? null
   }
 
+  async readViewEntry(pluginKey: string, viewId: string): Promise<{ html: string } | null> {
+    const plugin = this.options.resolveApprovedPlugin(pluginKey)
+    const view = plugin?.manifest.contributes.views.find((entry) => entry.id === viewId)
+    if (!plugin || !view) {
+      return null
+    }
+    try {
+      await this.options.contentVerifier.verify(plugin)
+      const html = buildPluginPanelShellHtml(
+        await readContainedPluginArtifactText(
+          plugin.rootDir,
+          view.entry,
+          PLUGIN_PANEL_ENTRY_MAX_BYTES
+        )
+      )
+      const current = this.options.resolveApprovedPlugin(pluginKey)
+      return current === plugin && current.rootDir === plugin.rootDir ? { html } : null
+    } catch (error) {
+      this.options.log(pluginKey)(
+        `view entry ${view.entry} rejected: ${error instanceof Error ? error.message : String(error)}`
+      )
+      return null
+    }
+  }
+
   async open(
     ownerKey: string,
     pluginKey: string,

@@ -1,0 +1,19 @@
+{
+  "manifestVersion": 1,
+  "id": "voxel-office",
+  "publisher": "voxel",
+  "name": "VOXEL Office",
+  "version": "0.1.0",
+  "description": "3D office view driven by Orca project and agent snapshots.",
+  "engines": { "orca": ">=1.4.0" },
+  "pluginApi": 1,
+  "contributes": {
+    "views": [{ "id": "office", "title": "Oficina 3D", "entry": "office.html" }]
+  },
+  "capabilities": [
+    { "kind": "projects:read" },
+    { "kind": "worktrees:read" },
+    { "kind": "agents:read" },
+    { "kind": "agents:send" }
+  ]
+}

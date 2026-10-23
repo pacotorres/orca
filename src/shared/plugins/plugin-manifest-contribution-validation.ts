@@ -9,6 +9,7 @@ type ContributionValidationManifest = {
   main?: string
   contributes: {
     panels: IdentifiedContribution[]
+    views: IdentifiedContribution[]
     commands: (IdentifiedContribution & { action?: string; context?: 'global' | 'worktree' })[]
     events: { on: string }[]
     languagePacks: { locale: string }[]
@@ -44,7 +45,7 @@ export function validatePluginManifestContributions(
   manifest: ContributionValidationManifest,
   ctx: RefinementCtx
 ): void {
-  for (const path of ['panels', 'commands'] as const) {
+  for (const path of ['panels', 'views', 'commands'] as const) {
     rejectDuplicateValues(
       manifest.contributes[path],
       (entry) => (entry as IdentifiedContribution).id,
@@ -140,5 +141,16 @@ export function validatePluginManifestContributions(
       path: ['capabilities'],
       message: 'events:subscribe capability required when contributes.events is non-empty'
     })
+  }
+  if (manifest.contributes.views.length > 0) {
+    for (const kind of ['projects:read', 'worktrees:read', 'agents:read']) {
+      if (!manifest.capabilities.some((capability) => capability.kind === kind)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['capabilities'],
+          message: `${kind} capability required when contributes.views is non-empty`
+        })
+      }
+    }
   }
 }

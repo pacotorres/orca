@@ -13,6 +13,11 @@ export type ActivePluginCommand = PluginHostListEntry['commands'][number] & {
   pluginName: string
 }
 
+export type ActivePluginView = NonNullable<PluginHostListEntry['views']>[number] & {
+  pluginKey: string
+  pluginName: string
+}
+
 export type PluginPanelsFetchStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type PluginPanelHealth = 'healthy' | 'error'
 
@@ -156,6 +161,29 @@ export function collectActivePluginPanels(plugins: PluginHostListEntry[]): Activ
         pluginName: plugin.name
       }))
     )
+}
+
+export function collectActivePluginViews(plugins: PluginHostListEntry[]): ActivePluginView[] {
+  return plugins
+    .filter(
+      (plugin) =>
+        !plugin.needsReconsent && ['running', 'restarting', 'idle'].includes(plugin.status)
+    )
+    .flatMap((plugin) =>
+      (plugin.views ?? []).map((view) => ({
+        ...view,
+        pluginKey: plugin.pluginKey,
+        pluginName: plugin.name
+      }))
+    )
+}
+
+export function usePluginViews(): ActivePluginView[] {
+  const plugins = usePluginPanelsStore((state) => state.plugins)
+  useEffect(() => {
+    ensurePluginPanelsLoaded()
+  }, [])
+  return useMemo(() => collectActivePluginViews(plugins), [plugins])
 }
 
 /** Tab keys of every installed plugin panel (any status) — used by the

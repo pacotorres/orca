@@ -41,6 +41,10 @@ const readPanelEntryArgsSchema = z.object({
   pluginKey: z.string().min(1),
   panelId: z.string().min(1)
 })
+const readViewEntryArgsSchema = z.object({
+  pluginKey: z.string().min(1),
+  viewId: z.string().min(1)
+})
 
 const invokeCommandArgsSchema = z.object({
   pluginKey: z.string().min(1),
@@ -161,6 +165,12 @@ export function registerPluginHandlers(
       return entry
     }
   )
+
+  ipcMain.handle('plugins:readViewEntry', async (_event, args: unknown) => {
+    await pluginService.whenReady()
+    const parsed = readViewEntryArgsSchema.parse(args)
+    return pluginService.panels.readViewEntry(parsed.pluginKey, parsed.viewId)
+  })
 
   // Panel-originated actions relayed by the renderer's postMessage bridge
   // host. Capability enforcement happens in main, never in the renderer.

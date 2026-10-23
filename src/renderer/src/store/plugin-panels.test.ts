@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PluginHostListEntry } from '../../../preload/api-types'
 import {
   collectActivePluginCommands,
+  collectActivePluginViews,
   collectEditablePluginCommands,
   usePluginPanelsStore
 } from './plugin-panels'
@@ -36,6 +37,24 @@ afterEach(() => {
 })
 
 describe('plugin panel list loading', () => {
+  it('exposes main-area views only for enabled, consent-current plugins', () => {
+    const enabled = {
+      ...plugin('orca-samples.enabled'),
+      views: [{ id: 'office', title: 'Office' }],
+      grantedCapabilities: ['projects:read', 'worktrees:read', 'agents:read']
+    }
+    const pending = { ...enabled, pluginKey: 'orca-samples.pending', status: 'pending' as const }
+    const stale = { ...enabled, pluginKey: 'orca-samples.stale', needsReconsent: true }
+
+    expect(collectActivePluginViews([enabled, pending, stale])).toEqual([
+      expect.objectContaining({
+        pluginKey: enabled.pluginKey,
+        pluginName: enabled.name,
+        id: 'office'
+      })
+    ])
+  })
+
   it('collects commands only from enabled plugin states', () => {
     const enabled = {
       ...plugin('orca-samples.enabled'),

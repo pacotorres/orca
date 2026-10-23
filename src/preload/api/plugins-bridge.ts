@@ -24,6 +24,8 @@ export const pluginsApi = {
     pluginKey: string
     panelId: string
   }): Promise<PluginPanelEntry | null> => ipcRenderer.invoke('plugins:readPanelEntry', args),
+  readViewEntry: (args: { pluginKey: string; viewId: string }): Promise<{ html: string } | null> =>
+    ipcRenderer.invoke('plugins:readViewEntry', args),
   invokeCommand: (args: { pluginKey: string; commandId: string; args?: unknown }) =>
     ipcRenderer.invoke('plugins:invokeCommand', args),
   panelAction: (args: {

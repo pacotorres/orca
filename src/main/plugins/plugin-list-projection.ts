@@ -32,6 +32,8 @@ export type PluginListPanelEntry = {
   tabKey: `plugin:${string}`
 }
 
+export type PluginListViewEntry = { id: string; title: string }
+
 export type PluginListStatus =
   | 'running'
   | 'restarting'
@@ -56,7 +58,10 @@ export type PluginListEntry = {
   official: boolean
   bundled: boolean
   capabilities: { kind: PluginCapabilityKind; description: string }[]
+  /** Capabilities actually approved for this plugin; separate from requests. */
+  grantedCapabilities: PluginCapabilityKind[]
   panels: PluginListPanelEntry[]
+  views: PluginListViewEntry[]
   commands: {
     id: string
     title: string
@@ -111,7 +116,9 @@ export async function buildPluginList(
           official: false,
           bundled: false,
           capabilities: [],
+          grantedCapabilities: [],
           panels: [],
+          views: [],
           commands: [],
           hasWorker: false,
           vmRecipes: [],
@@ -171,11 +178,16 @@ export async function buildPluginList(
           kind: capability.kind,
           description: PLUGIN_CAPABILITY_DESCRIPTIONS[capability.kind]
         })),
+        grantedCapabilities: service.getGrantedCapabilities(plugin.pluginKey) ?? [],
         panels: plugin.manifest.contributes.panels.map((panel) => ({
           id: panel.id,
           title: panel.title,
           ...(panel.icon ? { icon: panel.icon } : {}),
           tabKey: pluginPanelTabKey(plugin.pluginKey, panel.id)
+        })),
+        views: plugin.manifest.contributes.views.map((view) => ({
+          id: view.id,
+          title: view.title
         })),
         commands: service.contentPacks.commands.preview(plugin.pluginKey).map((command) => ({
           id: command.id,

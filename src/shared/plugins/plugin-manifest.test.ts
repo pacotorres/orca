@@ -60,6 +60,10 @@ describe('pluginManifestSchema boundaries', () => {
             { id: 'run', title: 'One' },
             { id: 'run', title: 'Two' }
           ],
+          views: [
+            { id: 'office', title: 'Office', entry: 'office.html' },
+            { id: 'office', title: 'Second office', entry: 'second.html' }
+          ],
           events: []
         }
       })
@@ -68,7 +72,29 @@ describe('pluginManifestSchema boundaries', () => {
     expect(parsed.success).toBe(false)
     if (!parsed.success) {
       expect(parsed.error.issues.map((issue) => issue.message)).toEqual(
-        expect.arrayContaining(['duplicate panels id: dashboard', 'duplicate commands id: run'])
+        expect.arrayContaining([
+          'duplicate panels id: dashboard',
+          'duplicate views id: office',
+          'duplicate commands id: run'
+        ])
+      )
+    }
+  })
+
+  it('requires explicit read-only capabilities for main-area views', () => {
+    const parsed = pluginManifestSchema.safeParse(
+      manifest({
+        contributes: { views: [{ id: 'office', title: 'Office', entry: 'office.html' }] }
+      })
+    )
+    expect(parsed.success).toBe(false)
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.message)).toEqual(
+        expect.arrayContaining([
+          'projects:read capability required when contributes.views is non-empty',
+          'worktrees:read capability required when contributes.views is non-empty',
+          'agents:read capability required when contributes.views is non-empty'
+        ])
       )
     }
   })
