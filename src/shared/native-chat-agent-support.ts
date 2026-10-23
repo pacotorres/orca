@@ -18,7 +18,7 @@ export const NATIVE_CHAT_SUPPORTED_AGENTS: ReadonlySet<string> = new Set(
   NATIVE_CHAT_SUPPORTED_AGENT_LIST
 )
 
-export function isNativeChatSupportedAgent(agent: string | null | undefined): boolean {
+export function isNativeChatSupportedAgent(agent: string | null | undefined): agent is TuiAgent {
   return agent != null && NATIVE_CHAT_SUPPORTED_AGENTS.has(agent)
 }
 

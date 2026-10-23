@@ -17,12 +17,14 @@ import type { ActiveAgentNotesSendResult } from '@/lib/active-agent-note-send'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { pluginViewExecutionHostState } from './plugin-view-connection-state'
 import { resolvePluginViewQuery } from './plugin-view-query'
+import { projectPluginViewChatSessions } from './plugin-view-chat-sessions'
 
 export function PluginViewPage({
   view,
   selectedAgentId,
   onAgentSelection,
   onSnapshotChange,
+  onChatSessionsChange,
   onRevealAgentHandlerChange,
   onSendAgentHandlerChange
 }: {
@@ -30,6 +32,7 @@ export function PluginViewPage({
   selectedAgentId: string | null
   onAgentSelection: (agentId: string | null) => void
   onSnapshotChange: (snapshot: PluginViewSnapshot) => void
+  onChatSessionsChange: (context: ReturnType<typeof projectPluginViewChatSessions>) => void
   onRevealAgentHandlerChange: (handler: ((agentId: string) => boolean) | null) => void
   onSendAgentHandlerChange: (
     handler: ((agentId: string, prompt: string) => Promise<ActiveAgentNotesSendResult>) | null
@@ -81,7 +84,12 @@ export function PluginViewPage({
     () => ({ ...sourceSnapshot, selectedAgentId }),
     [selectedAgentId, sourceSnapshot]
   )
+  const chatContext = useMemo(
+    () => projectPluginViewChatSessions(source, sourceSnapshot, identities.current),
+    [source, sourceSnapshot]
+  )
   useEffect(() => onSnapshotChange(snapshot), [onSnapshotChange, snapshot])
+  useEffect(() => onChatSessionsChange(chatContext), [chatContext, onChatSessionsChange])
   useEffect(() => {
     const revealAgent = (agentId: string): boolean => {
       if (!snapshot.agents.some((agent) => agent.id === agentId)) {

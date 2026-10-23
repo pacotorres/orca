@@ -17,6 +17,7 @@ import { useAppStore } from '@/store'
 import { PluginViewContextSidebar } from '../components/plugin-views/PluginViewContextSidebar'
 import type { PluginViewSnapshot } from '../../../shared/plugins/plugin-view-api'
 import type { ActiveAgentNotesSendResult } from '@/lib/active-agent-note-send'
+import type { projectPluginViewChatSessions } from './plugin-view-chat-sessions'
 
 const Landing = lazy(() => import('../components/Landing'))
 const WorktreeCreationPanel = lazy(
@@ -104,6 +105,9 @@ export function AppWorkspaceShell(props: {
   const [selectedPluginViewKey, setSelectedPluginViewKey] = useState('traditional')
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [pluginSnapshot, setPluginSnapshot] = useState<PluginViewSnapshot | null>(null)
+  const [pluginChatContext, setPluginChatContext] = useState<
+    ReturnType<typeof projectPluginViewChatSessions>
+  >({ sessions: [], workerParents: {} })
   const [revealPluginAgent, setRevealPluginAgent] = useState<((agentId: string) => boolean) | null>(
     null
   )
@@ -130,6 +134,7 @@ export function AppWorkspaceShell(props: {
     } else if (!pluginViewActive) {
       setContextSidebarOpen(false)
       setSelectedAgentId(null)
+      setPluginChatContext({ sessions: [], workerParents: {} })
     }
     previousPluginActive.current = pluginViewActive
   }, [layout.rightSidebarOpen, pluginViewActive])
@@ -139,6 +144,12 @@ export function AppWorkspaceShell(props: {
       current && snapshot.agents.some((agent) => agent.id === current) ? current : null
     )
   }, [])
+  const handlePluginChatSessionsChange = useCallback(
+    (context: ReturnType<typeof projectPluginViewChatSessions>): void => {
+      setPluginChatContext(context)
+    },
+    []
+  )
   const toggleContextSidebar = useCallback((): void => {
     setContextSidebarOpen((open) => !open)
   }, [])
@@ -287,6 +298,7 @@ export function AppWorkspaceShell(props: {
                           selectedAgentId={selectedAgentId}
                           onAgentSelection={setSelectedAgentId}
                           onSnapshotChange={handlePluginSnapshotChange}
+                          onChatSessionsChange={handlePluginChatSessionsChange}
                           onRevealAgentHandlerChange={setRevealPluginAgent}
                           onSendAgentHandlerChange={setSendPluginAgent}
                         />
@@ -341,6 +353,8 @@ export function AppWorkspaceShell(props: {
                   selectedAgentId={selectedAgentId}
                   open={contextSidebarOpen}
                   width={rightSidebarWidth}
+                  sessions={pluginChatContext.sessions}
+                  workerParents={pluginChatContext.workerParents}
                   onSelectAgent={setSelectedAgentId}
                   canSendAgentMessages={canSendAgentMessages}
                   onSendAgent={sendPluginAgent}

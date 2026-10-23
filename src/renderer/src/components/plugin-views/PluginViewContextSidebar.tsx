@@ -1,8 +1,28 @@
-import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { MessageSquare, X } from 'lucide-react'
 import type { PluginViewSnapshot } from '../../../../shared/plugins/plugin-view-api'
 import type { ActiveAgentNotesSendResult } from '@/lib/active-agent-note-send'
+import { useAppStore } from '@/store'
+import { useSidebarResize } from '@/hooks/useSidebarResize'
+import {
+  RIGHT_SIDEBAR_MIN_WIDTH,
+  clampRightSidebarPanelWidth,
+  computeMaxRightSidebarPanelWidth
+} from '@/components/right-sidebar/right-sidebar-width'
+import { useWindowWidth } from '@/components/right-sidebar/use-window-width'
+import type {
+  PluginViewChatSession,
+  PluginViewWorkerParents
+} from '@/app-shell/plugin-view-chat-sessions'
 import { activityLabel, observedActivityLabel, statusLabel } from './plugin-view-context-labels'
+import {
+  hostStateLabel,
+  sendResultMessage,
+  statusMayBeAged,
+  updatedLabel
+} from './plugin-view-context-sidebar-utils'
+
+const NativeChatView = lazy(() => import('../native-chat/NativeChatView'))
 
 type Props = {
   title: string
@@ -10,6 +30,8 @@ type Props = {
   selectedAgentId: string | null
   open: boolean
   width: number
+  sessions?: PluginViewChatSession[]
+  workerParents?: PluginViewWorkerParents
   onSelectAgent: (agentId: string | null) => void
   onRevealAgent: (agentId: string) => boolean
   canSendAgentMessages: boolean
@@ -17,72 +39,8 @@ type Props = {
   onClose: () => void
 }
 
-function hostStateLabel(state: PluginViewSnapshot['activeHostState']): string | null {
-  switch (state) {
-    case 'connected':
-      return 'Conectado'
-    case 'connecting':
-      return 'Conectando'
-    case 'disconnected':
-      return 'Desconectado'
-    case 'unavailable':
-      return 'Orca no disponible'
-    case 'unknown':
-      return 'Sin verificar'
-    default:
-      return null
-  }
-}
-
-function updatedLabel(timestamp: number | null, now: number): string | null {
-  if (!timestamp || now === 0) {
-    return null
-  }
-  const minutes = Math.max(0, Math.floor((now - timestamp) / 60_000))
-  if (minutes < 1) {
-    return 'Actualizado hace menos de un minuto'
-  }
-  if (minutes < 60) {
-    return `Actualizado hace ${minutes} min`
-  }
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) {
-    return `Actualizado hace ${hours} h`
-  }
-  return `Actualizado hace ${Math.floor(hours / 24)} d`
-}
-
-function statusMayBeAged(status: string, timestamp: number | null, now: number): boolean {
-  return Boolean(
-    timestamp &&
-    ['working', 'blocked', 'waiting'].includes(status.toLowerCase()) &&
-    now - timestamp > 5 * 60_000
-  )
-}
-
-function sendResultMessage(status: ActiveAgentNotesSendResult['status']): string {
-  switch (status) {
-    case 'sent':
-      return 'Orca confirmó el envío.'
-    case 'unconfirmed':
-      return 'No se pudo confirmar si llegó. Revisa la sesión; Orca bloquea el reenvío del mismo texto.'
-    case 'partial-submit-failed':
-      return 'El texto pudo quedar pegado en la sesión. Revísala; Orca bloquea el reenvío del mismo texto.'
-    case 'status-unavailable':
-      return 'No se pudo verificar la sesión. Revísala; Orca bloquea el reenvío del mismo texto.'
-    case 'no-active-terminal':
-      return 'La sesión ya no está disponible en este worktree.'
-    case 'permission':
-      return 'Orca bloqueó el envío por permisos o porque el agente requiere atención.'
-    case 'not-ready':
-      return 'La sesión ya no está lista para recibir instrucciones.'
-    case 'not-writable':
-      return 'Esta sesión no admite mensajes en este momento.'
-    case 'empty':
-    case 'no-agent':
-      return 'Orca no encontró una sesión de agente que corresponda a este destino.'
-  }
-}
+const EMPTY_SESSIONS: PluginViewChatSession[] = []
+const EMPTY_WORKER_PARENTS: PluginViewWorkerParents = {}
 
 export function PluginViewContextSidebar({
   title,
@@ -90,6 +48,8 @@ export function PluginViewContextSidebar({
   selectedAgentId,
   open,
   width,
+  sessions = EMPTY_SESSIONS,
+  workerParents = EMPTY_WORKER_PARENTS,
   onSelectAgent,
   onRevealAgent,
   canSendAgentMessages,
@@ -105,7 +65,19 @@ export function PluginViewContextSidebar({
     prompt: string
     result: ActiveAgentNotesSendResult
   } | null>(null)
-  // Keep relative timestamps and the "no recent signal" hint current while open.
+  const setRightSidebarWidth = useAppStore((state) => state.setRightSidebarWidth)
+  const windowWidth = useWindowWidth()
+  const maxWidth = computeMaxRightSidebarPanelWidth(windowWidth, 0)
+  const renderedWidth = clampRightSidebarPanelWidth(width, windowWidth, 0)
+  const { containerRef, onResizeStart } = useSidebarResize<HTMLDivElement>({
+    isOpen: open,
+    width: renderedWidth,
+    minWidth: RIGHT_SIDEBAR_MIN_WIDTH,
+    maxWidth,
+    deltaSign: -1,
+    setWidth: setRightSidebarWidth
+  })
+
   useEffect(() => {
     if (!open) {
       return
@@ -114,16 +86,20 @@ export function PluginViewContextSidebar({
     const timer = window.setInterval(() => setClock(Date.now()), 30_000)
     return () => window.clearInterval(timer)
   }, [open])
-  if (!open) {
-    return null
-  }
+
   const selectedAgent = snapshot?.agents.find((agent) => agent.id === selectedAgentId) ?? null
+  const selectedSession = sessions.find((session) => session.agentId === selectedAgentId) ?? null
+  const parentAgentId = selectedAgent ? workerParents[selectedAgent.id] : undefined
+  const parentAgent = parentAgentId
+    ? (snapshot?.agents.find((agent) => agent.id === parentAgentId) ?? null)
+    : null
   const draft = selectedAgent && draftByAgent?.agentId === selectedAgent.id ? draftByAgent.text : ''
   const canSendSelectedAgent = Boolean(
     canSendAgentMessages &&
     selectedAgent &&
     !selectedAgent.worker &&
-    selectedAgent.status === 'working'
+    selectedAgent.status === 'working' &&
+    !selectedSession
   )
   const uncertainRepeat = Boolean(
     selectedAgent &&
@@ -135,243 +111,297 @@ export function PluginViewContextSidebar({
   )
   const worktreeName = (id: string): string =>
     snapshot?.worktrees.find((worktree) => worktree.id === id)?.name ?? 'Worktree no disponible'
+  const chooseAgent = (agentId: string | null): void => {
+    setRevealError(false)
+    onSelectAgent(agentId)
+  }
 
   return (
     <aside
+      ref={containerRef}
       aria-label={`Panel contextual de ${title}`}
       data-plugin-context-sidebar="true"
-      className="scrollbar-sleek flex h-full min-h-0 shrink-0 flex-col border-l border-border bg-sidebar text-sidebar-foreground"
-      style={{ width: `min(${Math.max(280, width)}px, calc(100vw - 320px))` }}
+      aria-hidden={!open}
+      hidden={!open}
+      className="scrollbar-sleek relative flex h-full min-h-0 shrink-0 flex-col border-l border-border bg-sidebar text-sidebar-foreground"
+      style={{ width: open ? `${renderedWidth}px` : '0px' }}
     >
-      <header className="flex h-9 min-h-9 items-center justify-between border-b border-border px-3">
-        <div className="min-w-0">
-          <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Contexto de vista
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-9 min-h-9 items-center justify-between border-b border-border px-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <MessageSquare className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Oficina · Chat de Orca
+            </span>
           </div>
-        </div>
-        <button
-          type="button"
-          className="sidebar-toggle ml-2"
-          aria-label="Cerrar panel contextual"
-          onClick={onClose}
-        >
-          <X size={15} />
-        </button>
-      </header>
+          <button
+            type="button"
+            className="sidebar-toggle ml-2"
+            aria-label="Cerrar chat; la sesión seguirá activa"
+            title="Cerrar chat (la sesión sigue activa)"
+            onClick={onClose}
+          >
+            <X className="size-4" />
+          </button>
+        </header>
 
-      <div className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto p-3">
-        <section className="mb-5">
-          <div className="mb-1 text-xs text-muted-foreground">Proyecto</div>
-          <h2 className="truncate text-base font-semibold">
-            {snapshot?.project?.name ?? 'Sin proyecto activo'}
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {snapshot
-              ? `${snapshot.worktrees.length} worktrees · ${snapshot.agents.length} agentes y workers`
-              : 'Los datos del plugin no están disponibles.'}
-          </p>
+        <section className="shrink-0 border-b border-border px-3 py-2.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground">Proyecto</div>
+              <h2 className="truncate text-sm font-semibold">
+                {snapshot?.project?.name ?? 'Sin proyecto activo'}
+              </h2>
+            </div>
+            <span className="shrink-0 pt-4 text-xs text-muted-foreground">
+              {snapshot ? `${snapshot.worktrees.length} worktrees` : 'Sin datos'}
+            </span>
+          </div>
           {snapshot?.activeHostState ? (
-            <p className="mt-2 text-xs" role="status">
-              Worktree activo · host {hostStateLabel(snapshot.activeHostState)}
+            <p className="mt-1 text-xs text-muted-foreground" role="status">
+              Contexto activo · host {hostStateLabel(snapshot.activeHostState)}
             </p>
           ) : null}
         </section>
 
         {selectedAgent ? (
-          <section
-            className="mb-5 rounded-md border border-border bg-background/50 p-3"
-            data-selected-agent-id={selectedAgent.id}
-          >
-            <div className="text-xs text-muted-foreground">Persona seleccionada</div>
-            <h3 className="mt-1 truncate text-sm font-semibold">{selectedAgent.name}</h3>
-            {selectedAgent.model ? (
-              <div className="mt-1 truncate text-xs text-muted-foreground">
-                Modelo: {selectedAgent.model}
+          <section className="shrink-0 space-y-2 border-b border-border px-3 py-2.5">
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="truncate text-sm font-semibold text-foreground">
+                  {selectedAgent.name}
+                </h2>
+                <p className="truncate text-xs text-muted-foreground">
+                  {selectedAgent.model ? `Modelo: ${selectedAgent.model} · ` : ''}
+                  {worktreeName(selectedAgent.worktreeId)}
+                </p>
               </div>
-            ) : null}
-            <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-              <span>{selectedAgent.worker ? 'Worker' : 'Agente'}</span>
-              <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
+              <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-2xs text-muted-foreground">
                 {statusLabel(selectedAgent.status)}
               </span>
             </div>
-            <div className="mt-3 rounded-md bg-muted/40 px-2.5 py-2 text-xs">
-              <div className="font-medium">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>
                 Actividad:{' '}
                 {observedActivityLabel(selectedAgent.activity) ??
                   activityLabel(selectedAgent.status, selectedAgent.attention)}
-              </div>
+              </span>
               {selectedAgent.attention ? (
-                <div className="mt-1 text-status-warning">
-                  Orca indica que este agente espera atención.
-                </div>
+                <span className="text-status-warning">· Atención</span>
               ) : null}
               {updatedLabel(selectedAgent.statusUpdatedAt, clock) ? (
-                <div className="mt-1 text-muted-foreground">
-                  {updatedLabel(selectedAgent.statusUpdatedAt, clock)}
-                </div>
-              ) : null}
-              {statusMayBeAged(selectedAgent.status, selectedAgent.statusUpdatedAt, clock) ? (
-                <div className="mt-1 text-status-warning">
-                  Sin señal de estado reciente; confirma la sesión antes de confiar en este estado.
-                </div>
+                <span className="truncate">
+                  · {updatedLabel(selectedAgent.statusUpdatedAt, clock)}
+                </span>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="mt-3 w-full rounded-md border border-border px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => setRevealError(!onRevealAgent(selectedAgent.id))}
-            >
-              Abrir sesión en Orca
-            </button>
-            <section className="mt-4 border-t border-border pt-3" aria-label="Enviar instrucción">
-              <label htmlFor="plugin-agent-message" className="block text-xs font-medium">
-                Enviar instrucción
+            {statusMayBeAged(selectedAgent.status, selectedAgent.statusUpdatedAt, clock) ? (
+              <p className="text-xs text-status-warning">
+                Sin señal de estado reciente; confirma el estado en la sesión.
+              </p>
+            ) : null}
+            {sessions.length > 0 ? (
+              <label className="block">
+                <span className="mb-1 block text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Sesiones abiertas del proyecto
+                </span>
+                <select
+                  aria-label="Cambiar sesión de agente"
+                  value={selectedSession?.agentId ?? ''}
+                  onChange={(event) => chooseAgent(event.target.value || null)}
+                  className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="" disabled>
+                    El agente seleccionado no tiene chat nativo
+                  </option>
+                  {sessions.map((session) => (
+                    <option key={session.agentId} value={session.agentId}>
+                      {session.sessionLabel} · {session.worktreeName} ·{' '}
+                      {statusLabel(session.status)}
+                    </option>
+                  ))}
+                </select>
               </label>
-              {canSendSelectedAgent ? (
-                <>
-                  <textarea
-                    id="plugin-agent-message"
-                    value={draft}
-                    onChange={(event) =>
-                      selectedAgent &&
-                      setDraftByAgent({ agentId: selectedAgent.id, text: event.target.value })
-                    }
-                    maxLength={4096}
-                    rows={3}
-                    disabled={sending}
-                    placeholder={`Mensaje para ${selectedAgent.name}`}
-                    className="mt-2 w-full resize-y rounded-md border border-input bg-background px-2.5 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-                  />
-                  <button
-                    type="button"
-                    disabled={sending || !draft.trim() || !onSendAgent || uncertainRepeat}
-                    className="mt-2 w-full rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={async () => {
-                      if (!selectedAgent || !onSendAgent || sending || !draft.trim()) {
-                        return
-                      }
-                      setSending(true)
-                      setSendResult(null)
-                      try {
-                        const result = await onSendAgent(selectedAgent.id, draft)
-                        setSendResult({
-                          agentId: selectedAgent.id,
-                          prompt: draft.trim(),
-                          result
-                        })
-                        if (result.status === 'sent') {
-                          setDraftByAgent(null)
-                        }
-                      } catch {
-                        setSendResult({
-                          agentId: selectedAgent.id,
-                          prompt: draft.trim(),
-                          result: { status: 'status-unavailable', code: 'runtime-unverifiable' }
-                        })
-                      } finally {
-                        setSending(false)
-                      }
-                    }}
-                  >
-                    {sending ? 'Enviando…' : `Enviar a ${selectedAgent.name}`}
-                  </button>
-                  {sendResult?.agentId === selectedAgent.id ? (
-                    <p
-                      className={`mt-2 text-xs ${sendResult.result.status === 'sent' ? 'text-status-success' : 'text-destructive'}`}
-                      role="status"
-                    >
-                      {sendResultMessage(sendResult.result.status)}
-                    </p>
-                  ) : null}
-                </>
-              ) : !canSendAgentMessages ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  El envío está desactivado. Concede el permiso «Enviar mensajes a agentes» en
-                  Ajustes → Plugins.
-                </p>
-              ) : selectedAgent.worker ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Este worker no tiene una sesión independiente direccionable en Orca.
-                </p>
-              ) : (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Solo se puede enviar a agentes que estén trabajando; el estado actual no permite
-                  confirmar un destino seguro.
-                </p>
-              )}
-            </section>
+            ) : null}
+            {selectedSession ? (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                onClick={() => setRevealError(!onRevealAgent(selectedAgent.id))}
+              >
+                Abrir esta sesión en la vista tradicional
+              </button>
+            ) : null}
             {revealError ? (
-              <p role="status" className="mt-2 text-xs text-destructive">
+              <p role="status" className="text-xs text-destructive">
                 La sesión ya no está disponible en este worktree.
               </p>
             ) : null}
-            <button
-              type="button"
-              className="mt-2 text-xs text-muted-foreground underline-offset-2 hover:underline"
-              onClick={() => onSelectAgent(null)}
-            >
-              Limpiar selección
-            </button>
-            <dl className="mt-3 space-y-2 text-xs">
-              <div>
-                <dt className="text-muted-foreground">Worktree</dt>
-                <dd className="mt-0.5 truncate">{worktreeName(selectedAgent.worktreeId)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Contexto</dt>
-                <dd className="mt-0.5">
-                  {selectedAgent.activeWorktree ? 'Worktree activo' : 'Otro worktree del proyecto'}
-                </dd>
-              </div>
-            </dl>
           </section>
         ) : null}
 
-        <section>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold">Agentes del proyecto</h3>
-            <span className="text-[11px] text-muted-foreground">
-              {snapshot?.agents.length ?? 0}
-            </span>
-          </div>
-          {snapshot?.agents.length ? (
-            <ul className="space-y-1">
-              {snapshot.agents.map((agent) => (
-                <li key={agent.id}>
-                  <button
-                    type="button"
-                    data-context-agent-id={agent.id}
-                    aria-pressed={selectedAgentId === agent.id}
-                    onClick={() => onSelectAgent(agent.id)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors hover:bg-accent/60 ${selectedAgentId === agent.id ? 'border-ring bg-accent/40' : 'border-transparent'}`}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{agent.name}</span>
-                      <span className="mt-0.5 block truncate text-muted-foreground">
-                        {worktreeName(agent.worktreeId)} · {agent.worker ? 'worker' : 'agente'}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-muted-foreground">
-                      {agent.attention ? 'Atención' : statusLabel(agent.status)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {selectedSession ? (
+            <Suspense
+              fallback={
+                <div className="p-3 text-xs text-muted-foreground" role="status">
+                  Cargando conversación…
+                </div>
+              }
+            >
+              <NativeChatView
+                key={selectedSession.agentId}
+                terminalTabId={selectedSession.tabId}
+                paneKey={selectedSession.paneKey}
+                targetPtyId={selectedSession.ptyId}
+                launchAgent={selectedSession.agent}
+                isVisible={open}
+                isFocusedGroup
+                ownsTabWideLaunchDraft={false}
+                onSwitchToTerminal={() => {
+                  onRevealAgent(selectedSession.agentId)
+                }}
+              />
+            </Suspense>
+          ) : selectedAgent?.worker ? (
+            <div className="m-3 rounded-md border border-border p-3 text-sm">
+              <p className="font-medium">Este worker no tiene un chat independiente.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Orca lo vincula con la conversación de su agente principal.
+              </p>
+              {parentAgentId ? (
+                <button
+                  type="button"
+                  className="mt-3 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => chooseAgent(parentAgentId)}
+                >
+                  Abrir conversación de {parentAgent?.name ?? 'agente principal'}
+                </button>
+              ) : null}
+            </div>
+          ) : selectedAgent ? (
+            <div className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto p-3">
+              <button
+                type="button"
+                className="mb-3 w-full rounded-md border border-border px-2.5 py-2 text-left text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setRevealError(!onRevealAgent(selectedAgent.id))}
+              >
+                Abrir sesión en Orca
+              </button>
+              <section aria-label="Enviar instrucción">
+                <label htmlFor="plugin-agent-message" className="block text-xs font-medium">
+                  Enviar instrucción
+                </label>
+                {canSendSelectedAgent ? (
+                  <>
+                    <textarea
+                      id="plugin-agent-message"
+                      value={draft}
+                      onChange={(event) =>
+                        setDraftByAgent({ agentId: selectedAgent.id, text: event.target.value })
+                      }
+                      maxLength={4096}
+                      rows={3}
+                      disabled={sending}
+                      placeholder={`Mensaje para ${selectedAgent.name}`}
+                      className="mt-2 w-full resize-y rounded-md border border-input bg-background px-2.5 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      disabled={sending || !draft.trim() || !onSendAgent || uncertainRepeat}
+                      className="mt-2 w-full rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={async () => {
+                        if (!selectedAgent || !onSendAgent || sending || !draft.trim()) {
+                          return
+                        }
+                        setSending(true)
+                        setSendResult(null)
+                        try {
+                          const result = await onSendAgent(selectedAgent.id, draft)
+                          setSendResult({ agentId: selectedAgent.id, prompt: draft.trim(), result })
+                          if (result.status === 'sent') {
+                            setDraftByAgent(null)
+                          }
+                        } catch {
+                          setSendResult({
+                            agentId: selectedAgent.id,
+                            prompt: draft.trim(),
+                            result: { status: 'status-unavailable', code: 'runtime-unverifiable' }
+                          })
+                        } finally {
+                          setSending(false)
+                        }
+                      }}
+                    >
+                      {sending ? 'Enviando…' : `Enviar a ${selectedAgent.name}`}
+                    </button>
+                    {sendResult?.agentId === selectedAgent.id ? (
+                      <p
+                        className={`mt-2 text-xs ${sendResult.result.status === 'sent' ? 'text-status-success' : 'text-destructive'}`}
+                        role="status"
+                      >
+                        {sendResultMessage(sendResult.result.status)}
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Este agente no tiene una sesión de chat compatible disponible. Puedes abrir su
+                    sesión en la vista tradicional.
+                  </p>
+                )}
+              </section>
+            </div>
           ) : (
-            <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
-              {snapshot?.project
-                ? 'Orca todavía no reporta agentes para este proyecto.'
-                : 'Abre un worktree para cargar el proyecto.'}
-            </p>
+            <div className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto p-3">
+              <h2 className="text-sm font-semibold">Equipo del proyecto</h2>
+              <p className="mb-3 mt-1 text-xs text-muted-foreground">
+                Selecciona una persona en la oficina o abre una sesión existente.
+              </p>
+              {snapshot?.agents.length ? (
+                <ul className="space-y-1">
+                  {snapshot.agents.map((agent) => (
+                    <li key={agent.id}>
+                      <button
+                        type="button"
+                        data-context-agent-id={agent.id}
+                        onClick={() => chooseAgent(agent.id)}
+                        className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{agent.name}</span>
+                          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                            {worktreeName(agent.worktreeId)} · {agent.worker ? 'worker' : 'agente'}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {agent.attention ? 'Atención' : statusLabel(agent.status)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  {snapshot?.project
+                    ? 'Orca todavía no reporta agentes para este proyecto.'
+                    : 'Abre un worktree para cargar el proyecto.'}
+                </p>
+              )}
+              <p className="mt-5 border-t border-border pt-3 text-xs text-muted-foreground">
+                Las sesiones siguen ejecutándose bajo el control de Orca.
+              </p>
+            </div>
           )}
-        </section>
-
-        <p className="mt-5 border-t border-border pt-3 text-[11px] text-muted-foreground">
-          Solo lectura · Las sesiones y los agentes siguen bajo el control de Orca.
-        </p>
+        </div>
       </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Cambiar ancho del panel de chat"
+        className="absolute inset-y-0 left-0 z-10 w-1 cursor-col-resize transition-colors hover:bg-ring/20 active:bg-ring/30"
+        onMouseDown={onResizeStart}
+      />
     </aside>
   )
 }
