@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Script } from 'node:vm'
 import { build } from 'esbuild'
+import { patchAgentMotionLifecycle } from './agent-motion-lifecycle.mjs'
 
 const pluginDir = import.meta.dirname
 const agentVerseRoot = process.argv[2]
@@ -35,7 +36,10 @@ const [template, bundle] = await Promise.all([
 if (bundle.outputFiles.length !== 1) {
   throw new Error('Expected one self-contained browser bundle')
 }
-const runtime = bundle.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')
+const runtime = patchAgentMotionLifecycle(bundle.outputFiles[0].text).replace(
+  /<\/script/gi,
+  '<\\/script'
+)
 new Script(runtime, { filename: 'voxel-office.bundle.js' })
 const marker = '<!-- VOXEL_RUNTIME -->'
 if (!template.includes(marker)) {

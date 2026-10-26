@@ -1005,6 +1005,7 @@ html.native-shell .app-layout {
    so keep the standard titlebar surface instead of the sidebar tint. */
 .titlebar-left-floating {
   background: var(--bg-titlebar, var(--card));
+  -webkit-app-region: no-drag;
 }
 
 .titlebar-traffic-light-pad {

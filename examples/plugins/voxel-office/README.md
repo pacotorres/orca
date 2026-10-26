@@ -2,7 +2,7 @@
 
 3D office preview for Orca's experimental plugin main-area view. AgentVerse supplies the office, character geometry, materials, and deterministic character animations. Orca remains the source of truth for the project, worktrees, agents, workers, and their states.
 
-The iframe receives only Orca's bounded `orca-project-snapshot` message. It does not connect to AgentVerse's event stream, create agents, or send instructions. Working, waiting, and blocked agents stay at their assigned desks; waiting includes a periodic hand-raise. A completed agent uses AgentVerse's local behavior engine to walk to a lounge spot after a short pause. That visual-only behavior is discarded as soon as Orca reports another status, and it is never sent back to Orca as an activity event. Staff are excluded. The view can filter agents by worktree and status; selecting a character highlights it and focuses the camera. Orca's native contextual sidebar shows safe agent details and offers a manual message composer only when `agents:send` is explicitly granted and the selected primary agent is currently working. Sending uses Orca's session routing; workers have no independent send target.
+The iframe receives only Orca's bounded `orca-project-snapshot` message. It does not connect to AgentVerse's event stream, create agents, or send instructions. Working, waiting, and blocked agents stay at their assigned desks; waiting includes a periodic hand-raise. A completed agent uses AgentVerse's local behavior engine to walk to a lounge spot after a short pause. This visual-only behavior continues across snapshot updates and filter changes, and restarts only when Orca reports a new status update for that agent. It is never sent back to Orca as an activity event. Staff are excluded. The view can filter agents by worktree and status; selecting a character highlights it and focuses the camera. Orca's native contextual sidebar shows safe agent details and offers a manual message composer only when `agents:send` is explicitly granted and the selected primary agent is currently working. Sending uses Orca's session routing; workers have no independent send target.
 
 The snapshot also preserves the safe parent-to-worker relationship with an opaque `parentAgentId`. VOXEL treats an agent as a coordinator only when Orca reports at least one worker linked to it; it seats that coordinator first, places its workers at nearby free stations, and builds a glass cubicle around the coordinator's actual desk. This is a visual projection of Orca's existing hierarchy, not a new role or orchestration rule. Agents without a reported parent relationship stay ordinary agents, and worktree areas remain project context rather than agent-owned zones.
 
@@ -20,7 +20,7 @@ The plugin sandbox accepts one HTML entry with inline scripts and styles and blo
 node examples/plugins/voxel-office/build.mjs /path/to/agentverse
 ```
 
-This writes `office.html` beside this README. The bundle must remain under Orca's 10 MiB entry limit. The source template is `office.template.html`; `office.html` is generated and should be rebuilt after changing the AgentVerse adapter.
+This writes `office.html` beside this README. The build applies the VOXEL agent-motion lifecycle patch in `agent-motion-lifecycle.mjs`; it fails if the expected AgentVerse bundle anchors change. The bundle must remain under Orca's 10 MiB entry limit. The source template is `office.template.html`; `office.html` is generated and should be rebuilt after changing the AgentVerse adapter or its lifecycle patch.
 
 ## Try it in Orca
 

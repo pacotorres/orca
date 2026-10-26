@@ -213,7 +213,9 @@ export function AppWorkspaceShell(props: {
                       width: layout.sidebarOpen ? '100%' : undefined
                     }}
                   >
-                    {titlebarLeftControls}
+                    {pluginViewActive && layout.leftTitlebarChromeLayout.isFloating
+                      ? null
+                      : titlebarLeftControls}
                   </div>
                   {/* Why: flex-1/min-h-0 slot needed under the fixed 36px header, else the sidebar collapses to content height and loses its scroll viewport. */}
                   <div className="flex min-h-0 flex-1">
@@ -227,7 +229,14 @@ export function AppWorkspaceShell(props: {
             <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
               {/* Why: automations/artifacts own their page headers; the stacked titlebar would be an empty 36px stripe. */}
               {layout.workspaceChromeActive && pluginViews.length > 0 ? (
-                <div className="titlebar">{titlebarMainStrip}</div>
+                <div className="titlebar">
+                  {pluginViewActive && layout.leftTitlebarChromeLayout.isFloating ? (
+                    <div className="titlebar-left titlebar-left-floating w-max border-r border-border">
+                      {titlebarLeftControls}
+                    </div>
+                  ) : null}
+                  {titlebarMainStrip}
+                </div>
               ) : null}
               {layout.stackedSidebarOpen &&
               !pluginViewActive &&
